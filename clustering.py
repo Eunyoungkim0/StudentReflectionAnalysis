@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 import os
 from datasets import Dataset
 
@@ -51,28 +53,51 @@ for cluster, group in processed_df_cluster.groupby('cluster'):
 # 5. Confusion matrix
 from sklearn.preprocessing import LabelEncoder
 label_encoder = LabelEncoder()
+cluster_to_label = (
+    processed_df_cluster.groupby('cluster')['original_labels']
+    .agg(lambda x: x.value_counts().idxmax())
+    .to_dict()
+)
+
+processed_df_cluster['predicted_label'] = processed_df_cluster['cluster'].map(cluster_to_label)
 true_labels_encoded = label_encoder.fit_transform(processed_df_cluster['original_labels'])
 pred_labels_encoded = label_encoder.transform(processed_df_cluster['predicted_label'])
 
-conf_matrix_test = confusion_matrix(true_labels_encoded, pred_labels_encoded)
+conf_matrix_clst = confusion_matrix(true_labels_encoded, pred_labels_encoded)
 
 conf_matrix_df = pd.DataFrame(
-    conf_matrix_test,
+    conf_matrix_clst,
     index=label_encoder.classes_,
     columns=label_encoder.classes_
 )
 
-print("Confusion Matrix:")
-print(conf_matrix_df)
+plt.figure(figsize=(6, 4))
+sns.heatmap(conf_matrix_df, annot=True, fmt="d", cmap="Blues", cbar=True)
 
-# 6. Clustering performance evaluation
+plt.xticks(fontsize=8, rotation=45, ha='right')
+plt.yticks(fontsize=8)
+plt.title("Confusion Matrix Heatmap - Clustering")
+plt.xlabel("Predicted Labels")
+plt.ylabel("True Labels")
+
+plt.show()
+
+# 6. Correctness
+unique_labels = processed_df_cluster[['original_labels', 'labels']].drop_duplicates()
+sorted_labels = unique_labels.sort_values(by='labels')
+original_labels = sorted_labels['original_labels'].tolist()
+df_correctness_clst = fc.correctness(conf_matrix_clst, original_labels)
+print(df_correctness_clst)
+
+
+# 7. Clustering performance evaluation
 nmi_spectral, silhouette_spectral, purity = fc.clustering_performance(processed_df_cluster)
 print(f"NMI (Spectral): {nmi_spectral}")
 print(f"Silhouette Score (Spectral): {silhouette_spectral}")
 print(f'Purity: {purity:.2f}')
 
 
-# 7. Data visualization
+# 8. Data visualization
 # import umap
 
 # umap_model = umap.UMAP(n_components=2, random_state=42)
