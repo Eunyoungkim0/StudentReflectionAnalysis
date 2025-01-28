@@ -109,8 +109,15 @@ def print_cluster_output(df):
         print(group[['text', 'original_labels', 'cluster']])
         print("\n")
 
+def save_cluster_output_to_excel(df, clustering_methods, str_embedding_method, mode="a"):
+    output_file = f"clustering/result/cluster_output_{str_embedding_method}.xlsx"
+
+    with pd.ExcelWriter(output_file, engine="openpyxl", mode=mode) as writer:
+        df[['original_text', 'original_labels', 'cluster', 'predicted_label']].to_excel(writer, sheet_name=clustering_methods, index=True)
+
+
 # 5. Evaluation
-def clustering_evaluation(df, str_clustering_method, str_embedding_method, str_reflection):
+def clustering_evaluation(df, str_clustering_method, str_embedding_method, str_reflection, mode="a"):
     # 5-1. Confusion matrix
     label_encoder = LabelEncoder()
     cluster_to_label = (
@@ -120,6 +127,8 @@ def clustering_evaluation(df, str_clustering_method, str_embedding_method, str_r
     )
 
     df['predicted_label'] = df['cluster'].map(cluster_to_label)
+    save_cluster_output_to_excel(df, str_clustering_method, str_embedding_method, mode)
+
     true_labels_encoded = label_encoder.fit_transform(df['original_labels'])
     pred_labels_encoded = label_encoder.transform(df['predicted_label'])
 
@@ -209,7 +218,7 @@ def generate_embeddings(embedding_method, processed_df_cluster, count_label):
 def execute_clustering(embeddings, str_embedding_method, str_reflection, processed_df_cluster, count_label):
     str_clustering_method = "Spectral Clustering"
     clustered_data_sp = clustering_spectral(embeddings, processed_df_cluster, count_label)
-    clustering_evaluation(clustered_data_sp, str_clustering_method, str_embedding_method, str_reflection)
+    clustering_evaluation(clustered_data_sp, str_clustering_method, str_embedding_method, str_reflection, "w")
 
     str_clustering_method = "Affinity Propagation Clustering"
     clustered_data_ap = clustering_affinity_propagation(embeddings, processed_df_cluster, count_label)
