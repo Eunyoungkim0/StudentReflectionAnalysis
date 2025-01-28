@@ -114,7 +114,14 @@ from sklearn.metrics import normalized_mutual_info_score, silhouette_score
 def clustering_performance(df):
 
     nmi_spectral = normalized_mutual_info_score(df['labels'], df['cluster'])
-    silhouette_spectral = silhouette_score(df[['labels', 'cluster']], df['cluster'])
+    # silhouette_spectral = silhouette_score(df[['labels', 'cluster']], df['cluster'])
+
+
+    if len(df['cluster'].unique()) > 1:
+        silhouette_spectral = silhouette_score(df[['labels', 'cluster']], df['cluster'])
+    else:
+        silhouette_spectral = None
+        print("Silhouette score skipped: only one cluster detected.")
 
     np_clusters = df['cluster'].values
     np_labels = df['labels'].values

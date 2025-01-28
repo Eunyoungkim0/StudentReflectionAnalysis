@@ -62,11 +62,13 @@ def data_preprocessing(df, column_input, column_answer):
     df['text'] = df['original_text']
     df = df.dropna(subset=['text'])
     df['text'] = df['text'].apply(remove_stopwords, args=(pre_stop_words,))
-    df['text'] = df['text'].apply(lambda x: str(x).replace("\xa0", "").lower())    
+    df['text'] = df['text'].apply(lambda x: str(x).replace("\xa0", "").lower())
     df['text'] = df['text'].apply(remove_stopwords, args=(stop_words,))
     df['text'] = df['text'].apply(lambda x: x.replace('\n', ' ').replace('\r', ' '))
-    df['text'] = df['text'].apply(lambda x: re.sub(r"[^a-zA-Z0-9\s]", "", x))
+    df['text'] = df['text'].apply(lambda x: re.sub(r"[^a-zA-Z0-9\s]", " ", x))
     df = df.dropna(subset=['original_labels'])
+
+    print(f"Number of rows in df (Final): {df.shape[0]}")
 
     count_label = convert_to_categorical_data(df, 'original_labels')
     class_weights_tensor = get_class_weights(df, 'labels')
