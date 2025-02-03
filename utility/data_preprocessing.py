@@ -11,8 +11,8 @@ nltk.download('stopwords')
 pre_stop_words = {'honestly', 'mainly', 'particularly', 'notable', 'probably', 'somewhat', 'really', 'significant', 'pretty'}
 
 stop_words = set(stopwords.words('english'))
-#words_to_exclude = {'no', 'nor', 'not'}
-#stop_words = stop_words - words_to_exclude
+words_to_exclude = {'no', 'nor', 'not'}
+stop_words = stop_words - words_to_exclude
 words_to_include = {'would'}
 stop_words.update(words_to_include)
 
@@ -55,9 +55,12 @@ def get_class_weights(df, column_name):
     return class_weights_tensor
 
 
-def data_preprocessing(df, column_input, column_answer):
+def data_preprocessing(df, column_input, column_answer, label_exist=False):
     df = df.rename(columns={column_input: 'original_text', column_answer: 'original_labels'})
-    df = df[['original_text', 'original_labels']]
+    if label_exist == True:
+        df = df[['original_text', 'original_labels', 'cluster', 'predicted_label']]
+    else:
+        df = df[['original_text', 'original_labels']]
 
     df['text'] = df['original_text']
     df = df.dropna(subset=['text'])
@@ -66,7 +69,8 @@ def data_preprocessing(df, column_input, column_answer):
     df['text'] = df['text'].apply(remove_stopwords, args=(stop_words,))
     df['text'] = df['text'].apply(lambda x: x.replace('\n', ' ').replace('\r', ' '))
     df['text'] = df['text'].apply(lambda x: re.sub(r"[^a-zA-Z0-9\s]", " ", x))
-    df = df.dropna(subset=['original_labels'])
+    df['original_labels'] = df['original_labels'].apply(lambda x: 'No Issues' if x == 'None' else x)
+    # df = df.dropna(subset=['original_labels'])
 
     print(f"Number of rows in df (Final): {df.shape[0]}")
 

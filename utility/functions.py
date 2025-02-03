@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from transformers import AutoTokenizer, DataCollatorWithPadding, AutoModelForSequenceClassification, AutoModelForSequenceClassification, AutoConfig
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
-
+import utility.data_preprocessing as dpp
 import os
 main_dir = "."
 finetune_dir = os.path.join(main_dir, "finetuned_distilbert")
@@ -12,6 +12,12 @@ tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", clean_up_to
 if os.path.exists(finetune_dir):
     tokenizer_ft = AutoTokenizer.from_pretrained(finetune_dir)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+def load_data(data_path, cluster_data, column_input = "text", column_answer = "labels", label_exist=False):
+    df_ref_cluster = dpp.make_dataset(data_path, cluster_data)
+
+    return dpp.data_preprocessing(df_ref_cluster, column_input, column_answer, label_exist)
+
 
 def tokenizer_function(df, finetuned=False):
     if(finetuned):
@@ -52,7 +58,7 @@ def compute_metrics(p):
         'f1': f1
     }
 
-def generate_embeddings(batch, finetuned=True, count_label=7):
+def generate_embeddings_bert(batch, finetuned=True, count_label=7):
     if(finetuned):
         model = AutoModelForSequenceClassification.from_pretrained(finetune_dir)
     else:
@@ -116,7 +122,6 @@ def clustering_performance(df):
     nmi_spectral = normalized_mutual_info_score(df['labels'], df['cluster'])
     # silhouette_spectral = silhouette_score(df[['labels', 'cluster']], df['cluster'])
 
-
     if len(df['cluster'].unique()) > 1:
         silhouette_spectral = silhouette_score(df[['labels', 'cluster']], df['cluster'])
     else:
@@ -131,3 +136,86 @@ def clustering_performance(df):
     purity = calculate_purity(clusters, np_labels)
 
     return nmi_spectral, silhouette_spectral, purity
+
+
+def generate_embeddings(embedding_method, processed_df_cluster, count_label):
+    if embedding_method == 1:
+        embeddings = embeddings_tfidf(processed_df_cluster['text'])
+        str_embedding_method = "TF-IDF"
+        return embeddings, str_embedding_method
+    elif embedding_method == 2:
+        embeddings = embeddings_sentence_transformers(processed_df_cluster['text'])
+        str_embedding_method = "Sentence Transformers"
+        return embeddings, str_embedding_method
+    elif embedding_method == 3:
+        embeddings = embeddings_bert_wo_finetune(processed_df_cluster, count_label)
+        str_embedding_method = "DistilBERT (without fine-tuning)"
+        return embeddings, str_embedding_method
+    elif embedding_method == 4:
+        embeddings = embeddings_bert_w_finetune(processed_df_cluster, count_label)
+        str_embedding_method = "DistilBERT (with fine-tuning)"
+        return embeddings, str_embedding_method
+
+### ----------------------------------------------
+### Different Embedding Methods for Clustering
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
+from datasets import Dataset
+
+def embeddings_tfidf(txt_data):
+    tfidf_vectorizer = TfidfVectorizer()
+    embeddings = tfidf_vectorizer.fit_transform(txt_data)
+
+    return embeddings
+
+def embeddings_sentence_transformers(txt_data):
+    model = SentenceTransformer('all-mpnet-base-v2')
+    embeddings = model.encode(txt_data.tolist())
+
+    return embeddings
+
+def embeddings_bert_wo_finetune(txt_data, num_label):
+    dataset_cluster = Dataset.from_pandas(txt_data)
+    tokenized_dataset_cluster = dataset_cluster.map(tokenizer_function, batched=True, fn_kwargs={'finetuned': False})
+    embedded_dataset = tokenized_dataset_cluster.map(generate_embeddings_bert, batched=True, batch_size=16, fn_kwargs={'finetuned': False, 'count_label': num_label})
+    embeddings_array = np.array(embedded_dataset['embeddings'], dtype=np.float32)
+    embeddings = embeddings_array[:, 0, :]
+
+    return embeddings
+
+def embeddings_bert_w_finetune(txt_data, num_label):
+    dataset_cluster = Dataset.from_pandas(txt_data)
+    tokenized_dataset_cluster = dataset_cluster.map(tokenizer_function, batched=True, fn_kwargs={'finetuned': True})
+    embedded_dataset = tokenized_dataset_cluster.map(generate_embeddings_bert, batched=True, batch_size=16, fn_kwargs={'finetuned': True, 'count_label': num_label})
+    embeddings_array = np.array(embedded_dataset['embeddings'], dtype=np.float32)
+    embeddings = embeddings_array[:, 0, :]
+
+    return embeddings
+
+### ----------------------------------------------
+### Different Clustering Methods
+from sklearn.cluster import SpectralClustering, AffinityPropagation, KMeans
+from sklearn.metrics.pairwise import cosine_similarity
+
+def clustering_spectral(embeddings, df, count_label):
+    spectral = SpectralClustering(n_clusters=count_label, affinity='cosine') # Using cosine similarity
+    labels = spectral.fit_predict(embeddings)
+    df['cluster'] = labels
+
+    return df
+
+def clustering_affinity_propagation(embeddings, df, count_label):
+    affinity_propagation = AffinityPropagation(affinity='precomputed', damping=0.9)
+    similarity_matrix = cosine_similarity(embeddings)
+    labels = affinity_propagation.fit_predict(similarity_matrix)
+    df['cluster'] = labels
+
+    return df
+
+def clustering_kmeans(embeddings, df, count_label):
+    kmeans = KMeans(n_clusters=count_label, random_state=42, n_init=15)
+    kmeans.fit(embeddings)
+    df['cluster'] = kmeans.labels_
+
+    return df
+### ----------------------------------------------
