@@ -1,18 +1,22 @@
-# 0. Get Input
-# ref_num = int(input("Enter reflection number to finetune(0: all): "))
-# train_valid_split_yn = input("Is the data train/valid splitted? (y/n): ").lower()
-# test_data_labeled = input("Is test data labeled? (y/n)").lower()
-
+#----------------------------------------------------------------------------------------
+# Setting up Some Variables
 ref_num = 0
 train_valid_split_yn = 'y'
 test_data_labeled = 'n'
 train_only = 'y'
-exp_name = 'r1_80'
+exp_name = 'r1_100'
 
-# model_selected = 'DistilBERT'
+model_selected = 'DistilBERT'
 # model_selected = 'BERT'
-model_selected = 'RoBERTa'
+# model_selected = 'RoBERTa'
 
+ln_rt = 7e-5
+bt_sz = 24
+epochs = 10
+k_fold_number = 5
+
+column_input = "text"
+column_answer = "labels"
 #----------------------------------------------------------------------------------------
 import sys
 import os
@@ -152,9 +156,6 @@ df_ref_test = dpp.make_dataset(data_test, test_data) if test_data else None
 
 
 # 2. Data pre-processing and Tokenization
-column_input = "text"
-column_answer = "labels"
-
 # 2-1. For Training/Validation 
 if(train_valid_split_yn == 'y'):
 
@@ -219,12 +220,8 @@ print("-------------------------------------------------------------------------
 # if go_ahead != "y":
 #     sys.exit()
 
-# 4. Create model
+# 3. Create model
 model = fc.create_model(count_label, model_selected)
-ln_rt = 7e-5
-bt_sz = 24
-epochs = 10
-k_fold_number = 5
 
 training_args = TrainingArguments(
     output_dir=result_dir,
@@ -255,10 +252,10 @@ trainer = CustomTrainer(
     class_weights=class_weights_tensor # Giving more importance to underrepresented classes
 )
 
-# 5. Train the model
+# 4. Train the model
 print("\n--------------------------------------------------------------------------")
 if train_only == 'y':
-    k_fold_results = k_fold_cross_validation(
+    eval_info = k_fold_cross_validation(
         train=train,
         model=model,
         training_args=training_args,
@@ -267,41 +264,43 @@ if train_only == 'y':
         class_weights_tensor=class_weights_tensor,
         k=k_fold_number
     )
-    print(f"\nk_fold_results: \n{k_fold_results}")
+    print(f"\nk_fold_results: \n{eval_info}")
 else:
     trainer.train()
+    eval_info = trainer.evaluate()
 print("--------------------------------------------------------------------------\n")
 
-
-# 6. Confusion matrix
-predictions = trainer.predict(valid)
-pred_labels = np.argmax(predictions.predictions, axis=-1)
-
-conf_matrix = confusion_matrix(predictions.label_ids, pred_labels)
-
-plt.figure(figsize=(10, 8))
-sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", cbar=True,
-            xticklabels=original_labels, yticklabels=original_labels)
-
-plt.xticks(fontsize=9, rotation=45, ha='right')
-plt.yticks(fontsize=9)
-plt.xlabel("Predicted Label")
-plt.ylabel("True Label")
-plt.title(f"Confusion Matrix Heatmap - Fine-tuned {model_selected}")
-plt.tight_layout()
-
-savefig_name = "transformers/fig/" + model_selected + "_" + exp_name + ".png"
-plt.savefig(savefig_name, dpi=300, bbox_inches='tight')
-# plt.show()
-
-# 7. Correctness
+# 5. Confusion matrix and Weighted average correctness When test data is labeled
 if train_only == 'n':
+    predictions = trainer.predict(valid)
+    pred_labels = np.argmax(predictions.predictions, axis=-1)
+
+    # 5-1. Confusion matrix
+    conf_matrix = confusion_matrix(predictions.label_ids, pred_labels)
+
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", cbar=True,
+                xticklabels=original_labels, yticklabels=original_labels)
+
+    plt.xticks(fontsize=9, rotation=45, ha='right')
+    plt.yticks(fontsize=9)
+    plt.xlabel("Predicted Label")
+    plt.ylabel("True Label")
+    plt.title(f"Confusion Matrix Heatmap - Fine-tuned {model_selected}")
+    plt.tight_layout()
+
+    savefig_name = "transformers/fig/" + model_selected + "_" + exp_name + ".png"
+    plt.savefig(savefig_name, dpi=300, bbox_inches='tight')
+    # plt.show()
+
+    # 5-2. Correctness
     df_correctness = fc.correctness(conf_matrix, original_labels)
     print("\n--------------------------------------------------------------------------")
     print(df_correctness)
     print("--------------------------------------------------------------------------\n")
 
 
+# 6. Predict labels for test data
 predictions_test = trainer.predict(test)
 pred_labels_test = np.argmax(predictions_test.predictions, axis=-1)
 id2label = {idx: label for idx, label in enumerate(original_labels)}
@@ -320,7 +319,7 @@ pred_sheet_name = "Test_Data_Prediction"
 test_df.to_excel(save_pred_filename, sheet_name=pred_sheet_name, index=True, engine="openpyxl")
 
 
-# 8. Save the model
+# 7. Save the model
 fc.save_finetuned(model, tokenizer, exp_name, model_selected)
 
 end_time = datetime.now()
@@ -330,9 +329,42 @@ print("\n-------------------------")
 print(f"Start time: {start_time}")
 print(f"End   time: {end_time}")
 print(f"Execution Duration:     {elapsed_time}")
+hours, remainder = divmod(elapsed_time.seconds, 3600)
+minutes, seconds = divmod(remainder, 60)
+milliseconds = elapsed_time.microseconds / 1000
+formatted_time = f"{hours:02}:{minutes:02}:{seconds:02}.{int(milliseconds):03}"
+
+# Delete result_dir once it finishes
+if os.path.exists(result_dir):
+    shutil.rmtree(result_dir)
+
+# 8. Save Results
+new_row = {
+    "Experiment Name": exp_name.upper(),
+    "Model": model_selected,
+    "Train Dataset": data_filename + " [" + " ".join(train_data) + "]",
+    "Train Rows": len(train),
+    "Validation Dataset": data_filename_valid + " [" + " ".join(valid_data) + "]" if train_only == 'n' else "",
+    "Validation Rows": len(valid) if train_only == 'n' else "",
+    "Test Dataset": data_filename_test + " [" + " ".join(test_data) + "]",
+    "Test Rows": len(test),
+    "Number of Labels from Training Data": count_label,
+    "Labels Used": original_labels,
+    "Learning Rate": ln_rt,
+    "Batch Size": bt_sz,
+    "Number of Epochs": epochs,
+    "Execution Duration": formatted_time,
+    "K-fold[k]": k_fold_number if train_only == 'y' else "",
+    "Loss": eval_info['eval_loss'],
+    "Accuracy": eval_info['eval_accuracy'],
+    "Precision": eval_info['eval_precision'],
+    "Recall": eval_info['eval_recall'],
+    "F1-Score": eval_info['eval_f1']
+}
+fc.save_results(new_row)
 
 
-# 9. Leave logs
+# 9. Leave logs for each
 file_name = "transformers/result/" + model_selected + "_" + exp_name + ".txt"
 with open(file_name, "a") as file:
     file.write(f"- Dataset:\n")
@@ -347,12 +379,8 @@ with open(file_name, "a") as file:
     file.write(f"- Number of Epochs: {epochs}\n")
     file.write(f"- Execution Duration : {elapsed_time}\n")
 
-    file.write(f"- Evaluation(K-fold[k={k_fold_number}]) :\n{k_fold_results}\n") if train_only == 'y' else None
-    file.write(f"- Evaluation :\n{trainer.evaluate()}\n") if train_only == 'n' else None
+    file.write(f"- Evaluation(K-fold[k={k_fold_number}]) :\n{eval_info}\n") if train_only == 'y' else None
+    file.write(f"- Evaluation :\n{eval_info}\n") if train_only == 'n' else None
     file.write(f"\n# Weighted Averages of Error and Correctness of Fine-tuned {model_selected}\n") if train_only == 'n' else None
     file.write(df_correctness.to_string(index=False, header=True)) if train_only == 'n' else None
     file.write("\n------------------------------------------------------------\n")
-
-
-if os.path.exists(result_dir):
-    shutil.rmtree(result_dir)

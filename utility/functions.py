@@ -283,3 +283,21 @@ def clustering_kmeans(embeddings, df, count_label):
 
     return df
 ### ----------------------------------------------
+
+def save_results(new_row):
+    file_name = "transformers/compare_results.xlsx"
+    result_columns = [
+        "Experiment Name", "Model", "Train Dataset", "Train Rows", "Validation Dataset", "Validation Rows", 
+        "Test Dataset", "Test Rows", "Number of Labels from Training Data", "Labels Used", 
+        "Learning Rate", "Batch Size", "Number of Epochs", "Execution Duration", 
+        "K-fold[k]", "Loss", "Accuracy", "Precision", "Recall", "F1-Score"
+    ]
+    if os.path.exists(file_name):
+        df_result = pd.read_excel(file_name, index_col=None)
+    else:
+        data = {col: [None] for col in result_columns}
+        df_result = pd.DataFrame(data)
+        df_result.to_excel(file_name, index=False)
+
+    df_result = pd.concat([df_result, pd.DataFrame([new_row])], ignore_index=True)
+    df_result.to_excel(file_name, index=False)

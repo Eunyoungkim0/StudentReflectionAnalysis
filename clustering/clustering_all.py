@@ -1,3 +1,5 @@
+#----------------------------------------------------------------------------------------
+# Setting up Some Variables
 str_reflection = ""
 str_embedding_method = ""
 str_clustering_method = ""
@@ -9,39 +11,6 @@ int_ref_num = 0
 # model_selected = 'DistilBERT'
 model_selected = 'BERT'
 # model_selected = 'RoBERTa'
-
-# 0. Get Input
-# test_data_labeled = input("Is test data labeled? (y/n)").lower()
-# while True:
-#     try:
-#         embedding_method = int(input(
-#             "\nChoose embedding methods: \n"
-#             "\t1: TF-IDF, \n"
-#             "\t2: Sentence Transformers, \n"
-#             "\t3: DistilBERT without finetuning, \n"
-#             "\t4: DistilBERT with finetuning, \n"
-#             "\t0: Exit \n"
-#         ))
-
-#         if embedding_method == 0:
-#             print("Exiting the program.")
-#             break
-#         elif embedding_method in (1, 2, 3, 4):
-#             print(f"You selected method {embedding_method}.")
-#             break
-#         else:
-#             print("Invalid input. Please choose a valid number.")
-#     except ValueError:
-#         print("Invalid input. Please enter a number.")
-
-
-# try:
-#     ref_num = input("\nSelect how to cluster the dataset (0: All reflections together, 1: Each reflection separately): ")
-#     int_ref_num = int(ref_num)
-# except ValueError:
-#     print("Invalid input. Please enter a number.")
-
-
 #----------------------------------------------------------------------------------------
 import sys
 import os
@@ -81,9 +50,6 @@ elif(exp_name == "r1_80"):
     data_filename = "SL-R1-80-2_11.xlsx"
     sheet_names = ['fixed_sl-r1-80']
 
-# sheet_names = ['D-ESP4-1','D-ESU4-1','D-ESP4-2','D-ESU4-2','D-ESP4-3','D-ESU4-3','D-ESP4-4','D-ESU4-4']
-# sheet_names = ['Test Split']
-# sheet_names = ['S-ESA5-1']
 # sheet_names = ['Test_Data_Prediction']
 data_path = os.path.join(main_dir, "Data", data_filename)
 
@@ -202,12 +168,11 @@ def execute_clustering(embeddings, str_embedding_method, str_reflection, process
 def execute_all(cluster_data, str_reflection, model_selected):
 
     # for embedding_method in [1, 2, 3, 4]:
-
         embedding_method = 4
         processed_df_cluster, count_label, class_weights_tensor, unique_labels = fc.load_data(data_path, cluster_data, label_exist=False, test_data_labeled=True, train=True)
         processed_df_cluster['original_labels'] = processed_df_cluster['original_labels'].fillna('None')
         embeddings, str_embedding_method = fc.generate_embeddings(embedding_method, processed_df_cluster, count_label, model_selected, exp_name)
-        # # count_label = 10
+        # count_label = 10
         # count_label = elbow_method(embeddings)
         # print(f"The number of Labels by Elbow method: {count_label}")
         execute_clustering(embeddings, str_embedding_method, str_reflection, processed_df_cluster, count_label)
