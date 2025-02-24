@@ -1,0 +1,11 @@
+pandas
+openpyxl
+numpy
+torch
+nltk
+transformers
+scikit-learn
+seaborn
+matplotlib
+datasets
+bertopic
